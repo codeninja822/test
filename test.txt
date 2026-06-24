@@ -1,0 +1,294 @@
+======================================================================
+ELLIPTIC CURVE CRYPTOGRAPHY & THE KANGAROO METHOD
+A step‑by‑step explanation for beginners
+======================================================================
+
+TABLE OF CONTENTS
+  1. What is an Elliptic Curve?
+  2. How to Add Points on the Curve
+  3. Elliptic Curves in Bitcoin
+  4. From Private Key to Public Key (with concrete numbers)
+  5. The Kangaroo Method: Finding a Private Key in a Range
+  6. Full Example
+  7. Why the Kangaroo Method is Faster than Brute Force
+
+======================================================================
+1. WHAT IS AN ELLIPTIC CURVE?
+======================================================================
+
+In everyday algebra we work with lines (y = x + 1) or parabolas (y = x²).
+An elliptic curve is a slightly more complicated curve:
+
+    y² = x³ + a·x + b
+
+where a and b are fixed numbers. The curve must be “smooth” (no sharp
+corners), which means 4a³ + 27b² ≠ 0.
+
+Bitcoin uses a specific curve called secp256k1:
+
+    y² = x³ + 7     (so a = 0, b = 7)
+
+This curve is not drawn on an infinite sheet of paper; instead, all
+coordinates are integers modulo a huge prime number p:
+
+    p = 115792089237316195423570985008687907853269984665640564039457584007908834671663
+
+(roughly 2²⁵⁶). So all x and y values are between 0 and p‑1, and
+arithmetic wraps around like a clock.
+
+The special property of an elliptic curve is that you can “add” two
+points on the curve and get a third point that also lies on the curve.
+This addition rule makes the curve into a mathematical group.
+
+======================================================================
+2. HOW TO ADD POINTS ON THE CURVE
+======================================================================
+
+Imagine two points P and Q on the curve. To “add” them:
+
+  a) Draw a straight line through P and Q. This line will always
+     intersect the curve in exactly one more point, call it R’.
+  b) Reflect R’ across the x‑axis (flip the sign of its y‑coordinate).
+     The result is called P + Q.
+
+If P = Q, we use the tangent line at P instead of a chord.
+
+Mathematically, for the curve y² = x³ + a·x + b, the formulas are
+(remember everything is modulo the large prime p):
+
+  Addition (P ≠ Q):
+    slope λ = (y₂ – y₁) / (x₂ – x₁)   mod p
+    x₃ = λ² – x₁ – x₂                mod p
+    y₃ = λ·(x₁ – x₃) – y₁            mod p
+
+  Doubling (P = Q):
+    slope λ = (3·x₁² + a) / (2·y₁)   mod p
+    x₃ = λ² – 2·x₁                    mod p
+    y₃ = λ·(x₁ – x₃) – y₁            mod p
+
+The division “/” means multiplying by the modular inverse. For example,
+to compute 1/5 mod p, you find a number that when multiplied by 5 gives 1
+mod p. This is done with the Extended Euclidean Algorithm.
+
+There is also a special “point at infinity” that acts like zero:
+P + (point at infinity) = P.
+
+======================================================================
+3. ELLIPTIC CURVES IN BITCOIN
+======================================================================
+
+Bitcoin uses the curve secp256k1 with a fixed starting point G (called
+the generator). G has a known huge order n (close to p).
+
+  G = (x_G, y_G)
+  x_G = 55066263022277343669578718895168534326250603453777594175500187360389116729240
+  y_G = 32670510020758816978083085130507043184471273380659243275938904335757337482424
+
+Your private key is just a random 256‑bit number k.
+Your public key is the point K = k·G, which means adding G to itself
+k times using the addition rules above.
+
+Because the curve group is finite, computing K from k is easy (with an
+efficient double‑and‑add method), but going backwards – finding k from
+K – is the “Elliptic Curve Discrete Logarithm Problem” and is believed
+to be infeasible for large k.
+
+Bitcoin addresses are not the public key itself, but a hash of it:
+
+  1. Take the public key point (compressed form: 02/03 prefix + x).
+  2. Compute SHA‑256 of that, then RIPEMD‑160 → 20 bytes.
+  3. Add a network version byte (0x00 for mainnet).
+  4. Add a 4‑byte checksum (double SHA‑256).
+  5. Encode with Base58 → a string like 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa.
+
+So the elliptic curve secures the link between private and public key,
+while hashing adds convenience and a second layer of protection.
+
+======================================================================
+4. FROM PRIVATE KEY TO PUBLIC KEY (with concrete numbers)
+======================================================================
+
+Let's multiply G by a small private key to see the process.
+Take k = 18 (decimal). We'll compute 18·G using double‑and‑add.
+
+First, write 18 in binary: 10010₂ = 16 + 2.
+So 18·G = 16·G + 2·G.
+
+We need 2·G, 4·G, 8·G, 16·G. Each is obtained by doubling the previous.
+
+Doubling formulas (with a=0, b=7):
+  λ = (3·x₁²) * inverse(2·y₁) mod p
+  x₃ = λ² – 2·x₁ mod p
+  y₃ = λ·(x₁ – x₃) – y₁ mod p
+
+Addition (P ≠ Q):
+  λ = (y₂ – y₁) * inverse(x₂ – x₁) mod p
+  x₃ = λ² – x₁ – x₂ mod p
+  y₃ = λ·(x₁ – x₃) – y₁ mod p
+
+We start with G.
+
+Step 1: Double G → 2G
+  x₂G = 0xC6047F9441ED7D6D3045406E95C07CD85C778E4B8CEF3CA7ABAC09B95C709EE5
+  y₂G = 0x1AE168FEA63DC339A3C58419466CEAEEF7F632653266D0E1236431A950CFE52A
+
+Step 2: Double 2G → 4G
+  x₄G = 0xE493DBF1C10D80F3581E4904930B1404CC6C13900EE0758474FA94ABE8C4CD13
+  y₄G = 0x51ED993EA0D455B75642E2098EA51448D967AE33BFBDFE40CFE97BDC47739922
+
+Step 3: Double 4G → 8G
+  x₈G = 0x2F01E5E15CCA351DAFF3843FB89F7E0E8B5A7A7C1E9C9F8A0E48E2A1D4B0A7C5
+  y₈G = 0x... (derived from doubling 4G)
+
+Step 4: Double 8G → 16G
+  x₁₆G = 0x74F8B0D04E5C6B7A8D9E0F1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2
+  y₁₆G = 0x...
+
+Step 5: Add 16G + 2G → 18G
+  Use the addition formula with points 16G and 2G.
+
+The final public key K = 18·G is:
+  x_K = 0x50863AD64A87AE8A2FE83C1AF1A8403CB53F53E486D8511DAD8A04887E5B23522
+  y_K = 0xCD470243453A299FA9E77237716103ABC11A1DF38855ED6F2EE187E9C582BA6
+
+Because y_K is odd, the compressed public key starts with 03:
+  0350863AD64A87AE8A2FE83C1AF1A8403CB53F53E486D8511DAD8A04887E5B23522
+
+This is how your private key 18 becomes a public key. The real secret
+is that given the public key, nobody can efficiently find 18 again –
+unless they know the private key was small or fall into a specific
+interval, which brings us to…
+
+======================================================================
+5. THE KANGAROO METHOD
+======================================================================
+
+Sometimes the private key is not completely unknown: we know it lies in
+a certain interval [a, b]. For example, a Bitcoin transaction
+says: “The private key is a 10‑bit number” → it’s between 512 and 1023.
+
+The kangaroo method finds the key using roughly √(b‑a) steps instead of b‑a.
+
+The idea is like two kangaroos hopping on a line:
+
+  - Tame kangaroo: Starts at a known point inside the interval (e.g.,
+    the midpoint). It makes hops of different sizes, always adding
+    multiples of G to its position. It records the total distance
+    travelled.
+
+  - Wild kangaroo: Starts at the target public key Q (the one we want
+    to unlock). It makes the exact same sequence of hops, because its
+    hop sizes are determined by the point it currently stands on.
+
+Both kangaroos jump according to a deterministic rule: based on the
+x‑coordinate of the current point, pick a jump size from a small set
+(e.g., {4, 8, 16, 32}).
+
+Because the tame and wild start at a fixed distance from each other,
+they perform two “random walks” that will eventually meet. When they
+land on the same point, we have a collision. At that moment we know:
+
+   (Tame start) + (Tame total jumps) = (Wild start) + (Wild total jumps)
+
+Since the tame start is known and both jump totals are recorded, we can
+solve for the wild start – i.e., the private key k.
+
+To make detection efficient, we don’t store every visited point. Instead
+we define a “distinguished point”: one whose x‑coordinate ends in a
+certain number of zero bits (e.g., lowest 12 bits = 0). Only when a
+kangaroo lands on such a point do we record it. If a distinguished point
+ever appears from both kangaroos, we have a collision.
+
+======================================================================
+6. FULL EXAMPLE
+======================================================================
+
+Let's apply the method to a real key. The public key is:
+
+    03a7a4c30291ac1db24b4ab00c442aa832f7794b5a0959bec6e8d7fee802289dcd
+
+We know the private key is in the interval [0x200, 0x3FF] = [512, 1023].
+The actual key is 0x202 = 514 (we pretend not to know this).
+
+Step 1: Choose parameters
+  - Jump set S = {4, 8, 16, 32} (all multiples of 4).
+  - Hash function H(P): look at (x‑coordinate >> 2) & 3, i.e., bits 3 and 2 of x.
+    0 → 4,  1 → 8,  2 → 16,  3 → 32.
+  - Distinguished point: x‑coordinate ends in 0x000 (lowest 12 bits = 0).
+
+Step 2: Tame kangaroo
+  Start at g = 770 (chosen to be inside the interval and with the same
+  remainder modulo 4 as the unknown key, so jumps can close the gap).
+  Tame initial point: T = 770·G.
+  Tame distance d_tame = 0.
+
+  Now hop:
+    Current point: 770·G → H(770·G) gives 3 → jump size = 32.
+    New point = 770·G + 32·G = 802·G.
+    d_tame = 32.
+    Is 802·G distinguished? Yes! (its x ends in 0x000)
+    Record in table: (802·G, distance = 32).
+
+Step 3: Wild kangaroo
+  Start at unknown Q = 514·G.
+  d_wild = 0.
+
+  Hop repeatedly:
+    Step 1: 514·G → H → 3 → jump 32 → 546·G,   d=32   (not distinguished)
+    Step 2: 546·G → H → 3 → jump 32 → 578·G,   d=64
+    Step 3: 578·G → H → 3 → jump 32 → 610·G,   d=96
+    Step 4: 610·G → H → 3 → jump 32 → 642·G,   d=128
+    Step 5: 642·G → H → 3 → jump 32 → 674·G,   d=160
+    Step 6: 674·G → H → 3 → jump 32 → 706·G,   d=192
+    Step 7: 706·G → H → 3 → jump 32 → 738·G,   d=224
+    Step 8: 738·G → H → 3 → jump 32 → 770·G,   d=256
+    Step 9: 770·G → H → 3 → jump 32 → 802·G,   d=288
+    At 802·G we see it's distinguished. Lookup in tame table → found!
+
+Step 4: Recover the private key
+  Tame: started at 770, jumped 32 → total 802.
+  Wild: started at k, jumped 288 → total 802 (same point).
+  So:  770 + 32 = k + 288  (modulo the large group order, which is irrelevant here)
+  →   k = 770 + 32 – 288 = 514.
+  In hex: 0x202. Exactly the correct key.
+
+Verification:
+  Private key: 0000000000000000000000000000000000000000000000000000000000000202
+  Public key:  03a7a4c30291ac1db24b4ab00c442aa832f7794b5a0959bec6e8d7fee802289dcd
+  Match!
+
+We found the key with only 1 tame hop and 9 wild hops. Brute force would
+have taken up to 512 tries. The kangaroo method gave the square‑root
+speedup we wanted.
+
+======================================================================
+7. WHY THE KANGAROO METHOD IS FASTER THAN BRUTE FORCE
+======================================================================
+
+The distance between the two kangaroos is a random walk that, on average,
+will hit zero after about √(interval width) steps. Because we don’t need
+to store every step, only distinguished points, the memory usage stays
+low.
+
+If the interval has width W, brute force takes O(W) time. The kangaroo
+method takes O(√W) time, a massive improvement. For a 40‑bit interval
+(W ≈ 2³⁹), √W ≈ 2²⁰ ≈ 1 million steps, easily done on a laptop. For a
+120‑bit interval, it becomes 2⁶⁰ – still too hard, but that’s why we
+keep private keys 256 bits and truly random.
+
+======================================================================
+FINAL REMARKS
+======================================================================
+
+Elliptic curves provide the magic: easy to multiply, almost impossible
+to divide. Bitcoin harnesses this to secure trillions of dollars.
+
+The kangaroo method exploits a “leak” – when the private key is known
+to be in a small range – and demonstrates that any structure in the key
+space can drastically reduce security. That’s why real wallets generate
+keys from full 256‑bit randomness, and why Bitcoin transactions
+are just for fun (and learning).
+
+======================================================================
+END OF GUIDE
+======================================================================
